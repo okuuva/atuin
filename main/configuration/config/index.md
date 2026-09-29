@@ -78,9 +78,9 @@ sync_address = "https://api.atuin.sh"
 
 Default: `5m`
 
-How often to automatically sync with the server. This can be given in a "human-readable" format. For example, `10s`, `20m`, `1h`, etc.
+How often to automatically sync with the server, as a duration like `10s`, `20m`, `1h`, or `1d`.
 
-If set to `0`, Atuin will sync after every command. Some servers may rate limit frequent syncs, but this won't cause any issues.
+A bare number is read as a count of seconds, for backwards compatibility. If set to `0`, Atuin will sync after every command — some servers may rate limit frequent syncs, but this won't cause any issues.
 
 ```
 sync_frequency = "5m"
@@ -196,7 +196,7 @@ inline_height_shell_up_key_binding = 10
 
 ### `workspaces`
 
-Default: `false`
+Default: `true`
 
 This flag enables a pseudo filter-mode named "workspace": the filter is automatically activated when you're in a git repository.
 
@@ -342,6 +342,8 @@ history_filter = [
 ]
 ```
 
+A filtered command's output isn't captured either. To keep a command in history but not its output, use [`command_filter`](#command_filter) in `[output]`.
+
 ### `cwd_filter`
 
 Use the `cwd` filter to exclude directories from history tracking.
@@ -394,11 +396,11 @@ Matches each command against a set of built-in regular expressions, and refuses 
 
 For the exact expressions, see [`secrets.rs`](https://github.com/atuinsh/atuin/blob/main/crates/atuin-common/src/secrets.rs).
 
-The same patterns are applied to captured command output. A command whose own text is clean can still print a credential — `cat .env`, `gh auth token` — so recognised values in the captured output are replaced with `****` before storage. Only the value is replaced; the variable name or flag beside it stays.
+The same patterns are applied to captured command output. A command whose own text is clean can still print a credential — `cat .env`, `gh auth token` — so recognised values in the captured output are replaced with `****` before storage. Only the value is replaced; the variable name or flag beside it stays. A credential that color codes split apart in the output isn't recognised.
 
 Note
 
-This is a safety net, not a guarantee. It only catches credentials in recognized formats — use [`history_filter`](#history_filter) for anything else you need kept out, and see [Excluding Commands from History](https://docs.atuin.sh/guide/excluding-commands/index.md).
+This is a safety net, not a guarantee. It only catches credentials in recognized formats — use [`history_filter`](#history_filter) for anything else you need kept out, or [`command_filter`](#command_filter) to keep a command but not its output, and see [Excluding Commands from History](https://docs.atuin.sh/guide/excluding-commands/index.md).
 
 ### macOS Ctrl-n key shortcuts
 
@@ -423,22 +425,26 @@ show_numeric_shortcuts = true
 
 ### `network_timeout`
 
-Default: `30`
+Default: `30s`
 
-The max amount of time (in seconds) to wait for a network request. If any operations with a sync server take longer than this, the code will fail - rather than wait indefinitely.
+The maximum time to wait for a network request, as a duration like `500ms`, `30s`, or `5m`. If any operation with a sync server takes longer than this, it fails rather than waiting indefinitely.
+
+A bare number is read as a count of seconds (`network_timeout = 30`), for backwards compatibility.
 
 ```
-network_timeout = 30
+network_timeout = "30s"
 ```
 
 ### `network_connect_timeout`
 
-Default: `5`
+Default: `5s`
 
-The max time (in seconds) Atuin waits for a connection to become established with a remote sync server. Any longer than this and the request will fail.
+The maximum time Atuin waits for a connection to a remote sync server to be established, as a duration like `500ms`, `5s`, or `1m`. Any longer and the request fails.
+
+A bare number is read as a count of seconds (`network_connect_timeout = 5`), for backwards compatibility.
 
 ```
-network_connect_timeout = 5
+network_connect_timeout = "5s"
 ```
 
 ### `extra_headers`
@@ -457,12 +463,14 @@ extra_headers = { "CF-Access-Client-Id" = "...", "CF-Access-Client-Secret" = "..
 
 ### `local_timeout`
 
-Default: `2`
+Default: `2s`
 
-Timeout (in seconds) for acquiring a local database connection (SQLite).
+Timeout for acquiring a local database (SQLite) connection, as a duration like `500ms`, `2s`, or `1m`.
+
+A bare number is read as a count of seconds (`local_timeout = 2`), for backwards compatibility.
 
 ```
-local_timeout = 2
+local_timeout = "2s"
 ```
 
 ### `command_chaining`
@@ -689,34 +697,6 @@ common_prefix = [
 
 Configures commands that should be totally stripped from stats calculations. For example, 'sudo' should be ignored.
 
-## `dotfiles`
-
-Default: `false`
-
-To enable sync of shell aliases between hosts.
-
-Add the new section to the bottom of your config file, for every machine you use Atuin with
-
-```
-[dotfiles]
-enabled = true
-```
-
-Manage aliases using the command line options
-
-```
-# Alias 'k' to 'kubectl'
-atuin dotfiles alias set k kubectl
-
-# List all aliases
-atuin dotfiles alias list
-
-# Delete an alias
-atuin dotfiles alias delete k
-```
-
-After setting an alias, you will either need to restart your shell or source the init file for the change to take effect
-
 ## keys
 
 This section of the client config is specifically for configuring key-related settings.
@@ -897,12 +877,14 @@ autostart = false
 
 ### `sync_frequency`
 
-Default: `300`
+Default: `5m`
 
-How often the daemon should sync, in seconds
+How often the daemon should sync, as a duration like `30s`, `5m`, or `1h`.
+
+A bare number is read as a count of seconds (`sync_frequency = 300`), for backwards compatibility.
 
 ```
-sync_frequency = 300
+sync_frequency = "5m"
 ```
 
 ### `socket_path`
@@ -949,6 +931,75 @@ The port to use for client -> daemon communication. Only used on non-Unix system
 tcp_port = 8889
 ```
 
+## Output capture
+
+Settings for [capturing command output](https://docs.atuin.sh/guide/output-capture/index.md), which needs the [daemon](#daemon) and [pty-proxy](https://docs.atuin.sh/reference/pty-proxy/index.md).
+
+```
+[output]
+enabled = true
+max_output_size = "1MB"
+max_disk_usage = "10%"
+command_filter = []
+```
+
+### `enabled`
+
+Default: `false`
+
+Capture and store the output of the commands you run. When `false`, nothing is captured and the other keys in this section are ignored. Turning it off stops the daemon storing output right away; turning it on takes a daemon restart and a new shell, or run `atuin config enable output-capture`, which also sets up the daemon and pty-proxy.
+
+```
+[output]
+enabled = true
+```
+
+### `max_output_size`
+
+Default: `"1MB"`
+
+The most output kept for a single command. When a command prints more, Atuin keeps the start and the end, half each, and drops the middle. Takes a size like `"512KB"` or `"2MB"`. pty-proxy reads it when your shell starts.
+
+```
+[output]
+max_output_size = "1MB"
+```
+
+### `max_disk_usage`
+
+Default: `"10%"`
+
+The most disk space captured output may use: a size (`"10GB"`), a share of the total size of the disk that holds Atuin's data directory (`"10%"`), or `"unlimited"`. Past the limit, the daemon deletes the oldest output first. Restart the daemon after changing it.
+
+```
+[output]
+max_disk_usage = "10%"
+```
+
+### `command_filter`
+
+Default: `[]`
+
+Commands whose output is never stored. Unlike [`history_filter`](#history_filter), a matching command is still recorded in your history -- only its output is dropped. Commands `history_filter` excludes never have their output stored either.
+
+```
+[output]
+## Note that these regular expressions are unanchored, i.e. if they don't start
+## with ^ or end with $, they'll match anywhere in the command.
+command_filter = [
+   "^cat ",
+   "^kubectl get secret",
+]
+```
+
+The filter applies to output captured after the daemon picks up the change; it doesn't remove output that's already stored.
+
+### `sync`
+
+Default: `false`
+
+Reserved for syncing captured output between machines, which isn't implemented yet: captured output never leaves your machine, whatever this is set to.
+
 ## logs
 
 Behavior of log files.
@@ -958,7 +1009,7 @@ Behavior of log files.
 enabled = true
 dir = "~/.atuin/logs"
 level = "info"
-retention = 4
+retention = "4d"
 ```
 
 ### enabled
@@ -993,12 +1044,14 @@ level = "info"
 
 ### retention
 
-Default: `4`
+Default: `4d`
 
-How many days of log files to keep (per file type). Files older than this will be removed.
+How long to keep log files, per file type, as a duration like `12h` or `7d`. Files older than this are removed.
+
+A bare number is read as a count of days (`retention = 4`), for backwards compatibility.
 
 ```
-retention = 4
+retention = "4d"
 ```
 
 ### ai
@@ -1008,14 +1061,14 @@ A sub-object with specific options for AI logging:
 - `enabled` - whether to output AI logs; defaults to `logs.enabled`
 - `file` - the filename to use for the AI logs; defaults to `"ai.log"`. Always relative to `logs.dir`.
 - `level` - override the log level for the AI logs; defaults to `logs.level`
-- `retention` - how many days to store AI logs; defaults to `logs.retention`
+- `retention` - how long to keep AI logs; defaults to `logs.retention`
 
 ```
 [logs.ai]
 enabled = true
 file = "ai.log"
 level = "info"
-retention = 4
+retention = "4d"
 ```
 
 ### daemon
@@ -1025,14 +1078,14 @@ A sub-object with specific options for daemon logging:
 - `enabled` - whether to output daemon logs; defaults to `logs.enabled`
 - `file` - the filename to use for the daemon logs; defaults to `"daemon.log"`. Always relative to `logs.dir`.
 - `level` - override the log level for the daemon logs; defaults to `logs.level`
-- `retention` - how many days to store daemon logs; defaults to `logs.retention`
+- `retention` - how long to keep daemon logs; defaults to `logs.retention`
 
 ```
 [logs.daemon]
 enabled = true
 file = "daemon.log"
 level = "info"
-retention = 4
+retention = "4d"
 ```
 
 ### search
@@ -1042,14 +1095,14 @@ A sub-object with specific options for search logging:
 - `enabled` - whether to output search logs; defaults to `logs.enabled`
 - `file` - the filename to use for the search logs; defaults to `"search.log"`. Always relative to `logs.dir`.
 - `level` - override the log level for the search logs; defaults to `logs.level`
-- `retention` - how many days to store search logs; defaults to `logs.retention`
+- `retention` - how long to keep search logs; defaults to `logs.retention`
 
 ```
 [logs.search]
 enabled = true
 file = "search.log"
 level = "info"
-retention = 4
+retention = "4d"
 ```
 
 ## theme
